@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Hub Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' } }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; transition: background-color 0.3s, color 0.3s; user-select: none; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; transition: transform 0.6s; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        .is-flipped { transform: rotateY(180deg); }
+
+        .confetti { position: fixed; width: 10px; height: 10px; z-index: 9999; animation: fall 3s linear forwards; }
+        @keyframes fall { to { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+
+        .pdf-folder { margin-bottom: 15px; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; transition: 0.3s; }
+        .dark .pdf-folder { background: #1e293b; border-color: #334155; }
+        .folder-header { padding: 15px 20px; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .dark .folder-header { background: #0f172a; color: #f1f5f9; }
+        .folder-header:hover { background: #f1f5f9; }
+        .dark .folder-header:hover { background: #1e293b; }
+        .folder-content { padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+        .folder-content.hidden { display: none; }
+
+        /* [INJECTED] Zen Mode (Focus Mode) */
+        body.zen-mode nav, body.zen-mode #subjectModal, body.zen-mode #homeView, body.zen-mode .subject-header-top { display: none !important; }
+        body.zen-mode #subjectView { height: 100vh !important; padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+        #zenExitBtn { z-index: 999999 !important; }
+        
+        /* [INJECTED] Image Zoom */
+        #zoomableImage { transition: transform 0.2s ease-in-out; transform-origin: top left; }
+
+        /* [INJECTED] Drag and Drop & Checkbox UI */
+        .drag-over { border-color: #0ea5e9 !important; background-color: rgba(14, 165, 233, 0.05) !important; box-shadow: 0 0 10px rgba(14,165,233,0.2) inset; }
+        .file-checkbox { display: none; }
+        .group:hover .file-checkbox, .file-checkbox:checked { display: block; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 min-h-screen flex flex-col relative overflow-x-hidden">
+
+    <!-- [INJECTED] Zen Mode Exit Button -->
+    <button id="zenExitBtn" onclick="toggleZenMode()" class="fixed top-4 right-4 hidden bg-gray-800 dark:bg-gray-700 text-white px-5 py-2.5 rounded-xl shadow-lg border border-gray-600 font-bold flex items-center gap-2 hover:bg-gray-700 transition">
+        <i class="fa-solid fa-compress"></i> Exit Zen Mode
+    </button>
+
+    <!-- [INJECTED] Break Modal (Pomodoro Overlay) -->
+    <div id="breakModal" class="fixed inset-0 bg-gray-900/95 backdrop-blur-md z-[100] hidden flex-col items-center justify-center p-4 text-center">
+        <div class="text-6xl animate-bounce mb-4">🏆</div>
+        <h2 class="text-4xl font-black text-white mb-2">Focus Complete!</h2>
+        <p class="text-gray-300 mb-8 font-semibold">Take a well-deserved break.</p>
+        <div id="breakDisplay" class="text-7xl font-mono text-brand-400 font-black mb-10 drop-shadow-[0_0_20px_rgba(14,165,233,0.4)]">05:00</div>
+        <div class="flex gap-4">
+            <button onclick="pauseBreak()" id="pauseBreakBtn" class="px-8 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition flex items-center gap-2"><i class="fa-solid fa-pause"></i> Pause</button>
+            <button onclick="skipBreak()" class="px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-bold transition flex items-center gap-2"><i class="fa-solid fa-forward-step"></i> Skip Break</button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg text-white font-bold opacity-0 transition-opacity duration-300 z-50 pointer-events-none shadow-lg"></div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-100 dark:border-gray-700 text-center scale-95 transition-transform duration-200" id="confirmModalBox">
+            <div class="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-500 mx-auto flex items-center justify-center mb-4 text-3xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3 class="text-xl font-bold mb-2">Are you sure?</h3>
+            <p id="confirmMessage" class="text-gray-500 dark:text-gray-400 text-sm mb-6">This action cannot be undone.</p>
+            <div class="flex justify-center gap-3">
+                <button onclick="closeConfirmModal()" class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl font-bold transition">Cancel</button>
+                <button id="confirmBtn" onclick="if(confirmAction) { confirmAction(); closeConfirmModal(); }" class="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold transition shadow-md">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Navigation -->
+    <nav class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-40 border-b border-gray-100 dark:border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3 cursor-pointer group" onclick="goToHome()">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition">
+                        <i class="fa-solid fa-graduation-cap text-xl"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight hidden sm:block">Study Hub Workspace</span>
+                </div>
+                <div class="flex items-center gap-2 sm:gap-4">
+                    <div id="serverStatus" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border">
+                        <div class="w-2 h-2 rounded-full animate-pulse" id="statusDot"></div> <span id="statusText">Checking...</span>
+                    </div>
+                    
+                    <!-- [INJECTED] Import Backup Button -->
+                    <label title="Restore Backup" class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center hover:bg-blue-500 hover:text-white transition cursor-pointer">
+                        <i class="fa-solid fa-upload"></i>
+                        <input type="file" accept=".json" class="hidden" onchange="importData(event)">
+                    </label>
+
+                    <button onclick="exportData()" title="Backup Database" class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                        <i class="fa-solid fa-download"></i>
+                    </button>
+                    <button onclick="openSearchModal()" title="Search (Ctrl+K)" class="hidden md:flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded-xl text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                        <i class="fa-solid fa-search"></i>
+                        <span>Search...</span>
+                        <kbd class="ml-2 bg-gray-200 dark:bg-gray-800 px-2 rounded text-xs font-mono border dark:border-gray-600">Ctrl+K</kbd>
+                    </button>
+                    <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                        <i id="themeIcon" class="fa-solid fa-moon"></i>
+                    </button>
+                    <button onclick="exitApp()" title="Exit Workspace" class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center justify-center hover:bg-rose-500 hover:text-white transition shadow-sm border border-rose-200 dark:border-rose-800 ml-2">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Search Modal -->
+    <div id="searchModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-start justify-center pt-20 transition-opacity" onclick="closeSearchModal()">
+        <div class="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-700 m-4" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-3">
+                <i class="fa-solid fa-search text-brand-500 text-xl"></i>
+                <input type="text" id="searchInput" placeholder="Search..." class="w-full bg-transparent border-none focus:outline-none text-lg dark:text-white placeholder-gray-400" onkeyup="performSearch()" autofocus>
+            </div>
+            <div id="searchResults" class="max-h-96 overflow-y-auto p-2"></div>
+        </div>
+    </div>
+
+    <!-- Subject Modal (Add/Edit) -->
+    <div id="subjectModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-700">
+            <h3 id="modalTitle" class="text-xl font-bold mb-4 flex items-center gap-2"><i class="fa-solid fa-layer-group text-brand-500"></i> Add Subject</h3>
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Subject Name</label>
+                <input type="text" id="subjectNameInput" placeholder="e.g., Database..." class="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Select Icon</label>
+                <div class="flex gap-2 flex-wrap" id="iconPicker"></div>
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Select Theme Color</label>
+                <div class="flex gap-3 flex-wrap" id="colorPicker"></div>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeSubjectModal()" class="px-5 py-2.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition font-semibold">Cancel</button>
+                <button onclick="saveSubject()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl transition font-bold shadow-md flex items-center gap-2"><i class="fa-solid fa-check"></i> Save Subject</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Home View -->
+    <main id="homeView" class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 block animate-fade-in">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-6 bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div>
+                <h1 class="text-3xl font-bold mb-2 tracking-tight">Welcome to your workspace! 🚀</h1>
+                <p class="text-gray-500 dark:text-gray-400">Organize your study materials, focus deeply, and crush your goals.</p>
+                
+                <!-- [INJECTED] Uptime Stats & Leaderboard -->
+                <div class="flex gap-4 mt-4 text-sm font-bold bg-gray-50 dark:bg-gray-900 p-3 rounded-xl border border-gray-100 dark:border-gray-700 inline-flex">
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-clock text-blue-500"></i> <span id="uptimeStat">0m</span> active</div>
+                    <div class="w-px bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-crown text-amber-500"></i> Top: <span id="topSubStat">None</span></div>
+                </div>
+            </div>
+            
+            <div class="bg-gray-50 dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-6">
+                <!-- Creative Heatmap (Existing base modified seamlessly) -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm font-bold text-gray-700 dark:text-gray-300">Study Heatmap (30 Days)</span>
+                        <i class="fa-solid fa-fire text-orange-500 text-lg"></i>
+                    </div>
+                    <div id="heatmapGrid" class="flex gap-1 flex-wrap w-64"></div>
+                </div>
+                <!-- [INJECTED] Focus Rings -->
+                <div class="border-l border-gray-200 dark:border-gray-700 pl-6 flex flex-col items-center">
+                    <span class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Focus Ratio</span>
+                    <div class="relative w-16 h-16">
+                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                            <path class="text-gray-200 dark:text-gray-700" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path id="focusRingPath" class="text-brand-500" stroke-width="3" stroke-dasharray="0, 100" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center text-xs font-bold" id="focusRingText">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold flex items-center gap-2"><i class="fa-solid fa-book-open text-gray-400"></i> My Subjects</h2>
+        </div>
+        <div id="subjectsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </main>
+
+    <!-- Subject View -->
+    <main id="subjectView" class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 hidden flex-col h-[calc(100vh-64px)] overflow-hidden">
+        
+        <div class="subject-header-top flex justify-between items-center mb-6 shrink-0 bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div class="flex items-center gap-4">
+                <button onclick="goToHome()" class="w-10 h-10 rounded-full bg-gray-50 dark:bg-gray-900 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition group border border-gray-200 dark:border-gray-600">
+                    <i class="fa-solid fa-arrow-left text-gray-500 group-hover:-translate-x-1 transition-transform"></i>
+                </button>
+                <div class="flex items-center gap-3">
+                    <div id="activeSubjectIconBox" class="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg text-xl"></div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 id="activeSubjectTitle" class="text-2xl font-bold"></h1>
+                            <button id="editSubjectBtn" class="text-gray-400 hover:text-brand-500 transition text-sm"><i class="fa-solid fa-pen"></i></button>
+                        </div>
+                        <p id="activeSubjectStats" class="text-sm text-gray-500 dark:text-gray-400 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="subject-header-top flex gap-2 overflow-x-auto pb-2 mb-4 shrink-0 no-scrollbar border-b border-gray-200 dark:border-gray-700">
+            <button onclick="switchTab('pdfs')" id="tab-pdfs" class="tab-btn active-tab px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors"><i class="fa-solid fa-folder-open"></i> Files</button>
+            <button onclick="switchTab('notes')" id="tab-notes" class="tab-btn idle-tab px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors"><i class="fa-solid fa-pen-to-square"></i> Notes</button>
+            <button onclick="switchTab('tasks')" id="tab-tasks" class="tab-btn idle-tab px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors"><i class="fa-solid fa-list-check"></i> Tasks</button>
+            <button onclick="switchTab('links')" id="tab-links" class="tab-btn idle-tab px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors"><i class="fa-solid fa-link"></i> Links</button>
+            <button onclick="switchTab('deadlines')" id="tab-deadlines" class="tab-btn idle-tab px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors"><i class="fa-solid fa-calendar-day"></i> Deadlines</button>
+            <button onclick="switchTab('flashcards')" id="tab-flashcards" class="tab-btn idle-tab px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors"><i class="fa-solid fa-clone"></i> Flashcards</button>
+            <button onclick="switchTab('whiteboard')" id="tab-whiteboard" class="tab-btn idle-tab px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors"><i class="fa-solid fa-palette"></i> Whiteboard</button>
+        </div>
+
+        <div class="flex-grow flex flex-col min-h-0 overflow-hidden relative">
+            
+            <!-- FILES TAB -->
+            <div id="content-pdfs" class="tab-content h-full flex flex-col gap-4 overflow-y-auto pr-2 pb-20">
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap gap-4 items-center justify-between shrink-0">
+                    <div class="flex items-center gap-3 w-full md:w-auto">
+                        <select id="folderSelect" class="p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-semibold min-w-[180px]"></select>
+                        <button onclick="promptNewFolder()" class="p-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl font-bold transition flex items-center gap-2 text-sm" title="Create New Folder">
+                            <i class="fa-solid fa-folder-plus"></i> <span class="hidden sm:inline">New Folder</span>
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="splitScreenBtn" onclick="toggleSplitScreen()" class="hidden px-5 py-2.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-xl hover:bg-indigo-100 transition text-sm font-bold flex items-center gap-2 border border-indigo-200 dark:border-indigo-800">
+                            <i class="fa-solid fa-columns"></i> Split Screen
+                        </button>
+                        <label class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl cursor-pointer transition text-sm font-bold flex items-center gap-2 shadow-md">
+                            <i class="fa-solid fa-upload"></i> Upload Files
+                            <input type="file" id="pdfUpload" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png" class="hidden" onchange="handleFileUpload(event)">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- [INJECTED] Bulk Action Bar -->
+                <div id="bulkActionBar" class="hidden bg-rose-50 dark:bg-rose-900/30 p-3 rounded-xl border border-rose-200 dark:border-rose-800 flex justify-between items-center shrink-0 shadow-sm">
+                    <span class="font-bold text-rose-700 dark:text-rose-300"><span id="bulkCount">0</span> Selected</span>
+                    <div class="flex gap-2">
+                        <button onclick="selectAllFiles()" class="px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg text-sm font-bold shadow-sm border dark:border-gray-600">Select All</button>
+                        <button onclick="bulkDeleteFiles()" class="px-3 py-1.5 bg-rose-500 text-white rounded-lg text-sm font-bold shadow-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+                    </div>
+                </div>
+
+                <div id="pdfSplitArea" class="hidden flex-grow gap-4 min-h-[400px]">
+                    <div id="splitNotesPanel" class="w-1/3 flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden relative">
+                        <div class="p-4 bg-gray-50 dark:bg-gray-900 flex justify-between items-center border-b dark:border-gray-700">
+                            <span class="font-bold text-sm flex items-center gap-2"><i class="fa-solid fa-pen text-brand-500"></i> Quick Notes</span>
+                            <button onclick="closeSplitScreen()" class="text-gray-400 hover:text-rose-500 w-8 h-8 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex justify-center items-center"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                        <div class="p-4 flex-grow flex flex-col gap-3">
+                            <textarea id="splitNoteInput" placeholder="Summarize key points here..." class="flex-grow w-full p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none text-sm"></textarea>
+                            <button onclick="saveSplitNote()" class="w-full py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"><i class="fa-solid fa-save"></i> Save Note</button>
+                        </div>
+                    </div>
+                    
+                    <!-- [INJECTED] Resizer -->
+                    <div id="resizer" class="w-2 cursor-col-resize bg-gray-200 dark:bg-gray-700 rounded hover:bg-brand-500 transition-colors"></div>
+
+                    <div id="splitViewContainer" class="flex-grow bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden relative shadow-sm flex flex-col">
+                        <!-- [INJECTED] Zoom Controls -->
+                        <div id="zoomControls" class="hidden absolute top-4 right-4 z-10 bg-white dark:bg-gray-700 p-1 rounded-lg shadow-md border border-gray-200 dark:border-gray-600 flex gap-1">
+                            <button onclick="zoomImage(0.2)" class="w-8 h-8 flex items-center justify-center rounded bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"><i class="fa-solid fa-plus text-sm"></i></button>
+                            <button onclick="zoomImage(-0.2)" class="w-8 h-8 flex items-center justify-center rounded bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"><i class="fa-solid fa-minus text-sm"></i></button>
+                            <button onclick="resetZoom()" class="w-8 h-8 flex items-center justify-center rounded bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"><i class="fa-solid fa-expand text-sm"></i></button>
+                        </div>
+                        <div id="viewContainer" class="w-full h-full relative overflow-auto bg-gray-100 dark:bg-gray-900">
+                            <iframe id="pdfFrame" class="w-full h-full border-0 absolute inset-0 hidden"></iframe>
+                            <img id="zoomableImage" class="absolute hidden cursor-move" draggable="false" style="min-width: 100%; min-height: 100%; object-fit: contain;">
+                        </div>
+                    </div>
+                </div>
+                <div id="pdfsContainer" class="flex flex-col gap-4"></div>
+            </div>
+
+            <!-- NOTES TAB -->
+            <div id="content-notes" class="tab-content hidden h-full flex flex-col gap-4 overflow-y-auto pr-2 pb-20">
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0">
+                    <textarea id="noteInput" placeholder="Write an important note or idea..." class="w-full p-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 mb-4 min-h-[120px] transition dark:text-white"></textarea>
+                    <div class="flex justify-end"><button onclick="addNote()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold shadow-md flex items-center gap-2"><i class="fa-solid fa-plus"></i> Add Note</button></div>
+                </div>
+                <div id="notesList" class="grid gap-4 grid-cols-1 md:grid-cols-2"></div>
+            </div>
+
+            <!-- TASKS TAB -->
+            <div id="content-tasks" class="tab-content hidden h-full flex flex-col gap-4 overflow-y-auto pr-2 pb-20">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0">
+                    <div class="flex gap-3">
+                        <input type="text" id="taskInput" placeholder="Add a new task (e.g., Read Chapter 1)..." class="flex-grow p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-semibold dark:text-white">
+                        <button onclick="addTask()" class="px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold shadow-md"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <div class="mt-6 bg-gray-100 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden w-full relative">
+                        <div id="taskProgressBar" class="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full w-0 transition-all duration-700 ease-out"></div>
+                    </div>
+                    <div class="flex justify-between items-center mt-3">
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400" id="taskProgressText">0% Completed</p>
+                        <p class="text-xs text-gray-400" id="taskCountText">0 tasks remaining</p>
+                    </div>
+                </div>
+                <div id="tasksList" class="flex flex-col gap-3"></div>
+            </div>
+
+            <!-- LINKS TAB -->
+            <div id="content-links" class="tab-content hidden h-full flex flex-col gap-4 overflow-y-auto pr-2 pb-20">
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i class="fa-solid fa-link text-brand-500"></i> Add Important Link</h3>
+                    <div class="flex flex-col md:flex-row gap-4 mb-4">
+                        <input type="text" id="linkTitle" placeholder="Title (e.g., YouTube Course)" class="md:w-1/3 p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white">
+                        <input type="url" id="linkUrl" placeholder="https://..." class="flex-grow p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white">
+                    </div>
+                    <div class="flex justify-end"><button onclick="addLink()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold shadow-md"><i class="fa-solid fa-plus"></i> Save Link</button></div>
+                </div>
+                <div id="linksList" class="flex flex-col gap-3"></div>
+            </div>
+
+            <!-- DEADLINES TAB -->
+            <div id="content-deadlines" class="tab-content hidden h-full flex flex-col gap-4 overflow-y-auto pr-2 pb-20">
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i class="fa-solid fa-calendar-plus text-brand-500"></i> Add Deadline or Event</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <input type="text" id="dlTitle" placeholder="Title (e.g., Final Submission)" class="md:col-span-2 p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white">
+                        <select id="dlType" class="p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-semibold">
+                            <option value="Assignment">📝 Assignment</option>
+                            <option value="Exam">⚠️ Exam</option>
+                            <option value="Quiz">⏱️ Quiz</option>
+                            <option value="Project">🚀 Project</option>
+                        </select>
+                        <input type="date" id="dlDate" class="p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white">
+                    </div>
+                    <div class="flex justify-end"><button onclick="addDeadline()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold shadow-md">Save Event</button></div>
+                </div>
+                <div id="deadlinesList" class="flex flex-col gap-3"></div>
+            </div>
+
+            <!-- FLASHCARDS TAB -->
+            <div id="content-flashcards" class="tab-content hidden h-full flex flex-col gap-4 overflow-y-auto pr-2 pb-20">
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0">
+                    <div class="flex flex-col md:flex-row gap-4 mb-4">
+                        <select id="fcType" class="p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-bold md:w-1/4">
+                            <option value="Definition">📖 Definition</option>
+                            <option value="Formula">📐 Rule / Formula</option>
+                            <option value="Code">💻 Code Snippet</option>
+                            <option value="Note">📌 Important Note</option>
+                        </select>
+                        <input type="text" id="fcQuestion" placeholder="Question / Term" class="md:w-1/3 p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white">
+                        <input type="text" id="fcAnswer" placeholder="Answer / Explanation" class="flex-grow p-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white">
+                    </div>
+                    <div class="flex justify-end"><button onclick="addFlashcard()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold shadow-md"><i class="fa-solid fa-plus"></i> Create Card</button></div>
+                </div>
+                <div id="flashcardsList" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"></div>
+            </div>
+
+            <!-- WHITEBOARD TAB -->
+            <div id="content-whiteboard" class="tab-content hidden h-full flex flex-col gap-4">
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
+                    <div class="flex gap-4 items-center">
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm font-bold text-gray-600 dark:text-gray-300">Color:</label>
+                            <input type="color" id="wbColor" value="#0ea5e9" class="w-8 h-8 rounded cursor-pointer border-0 bg-transparent">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm font-bold text-gray-600 dark:text-gray-300">Size:</label>
+                            <input type="range" id="wbSize" min="1" max="20" value="3" class="w-24 accent-brand-500">
+                        </div>
+                        <div class="h-6 w-px bg-gray-300 dark:bg-gray-600 mx-3"></div>
+                        <button onclick="clearWhiteboard()" class="px-4 py-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-xl font-bold text-sm transition flex items-center gap-2"><i class="fa-solid fa-eraser"></i> Clear</button>
+                    </div>
+                    <button onclick="saveWhiteboard()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-sm shadow-md flex items-center gap-2"><i class="fa-solid fa-camera"></i> Save Snapshot</button>
+                </div>
+                <div class="flex-grow bg-white border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden relative cursor-crosshair shadow-inner" id="canvasContainer">
+                    <canvas id="whiteboardCanvas" class="absolute inset-0 w-full h-full bg-[#f8fafc]"></canvas>
+                </div>
+                <div id="savedWhiteboards" class="flex gap-4 overflow-x-auto p-3 shrink-0 h-32 border-t border-gray-200 dark:border-gray-700 items-center bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Pomodoro Widget -->
+    <div id="pomodoroWidget" class="fixed bottom-6 right-6 z-40 bg-white dark:bg-gray-800 rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] border border-gray-200 dark:border-gray-700 p-5 w-72 transition-all duration-300 transform hover:-translate-y-1">
+        <div class="flex justify-between items-center mb-3">
+            <span class="font-bold flex items-center gap-2 cursor-pointer" onclick="togglePomodoroCollapse()"><i class="fa-solid fa-stopwatch text-rose-500 text-xl"></i> Focus Timer</span>
+            <div class="flex gap-2">
+                <!-- [INJECTED] Lo-Fi Music Button -->
+                <button onclick="toggleLoFi()" title="Focus Music" class="text-gray-400 hover:text-brand-500 transition w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex justify-center items-center"><i id="lofiIcon" class="fa-solid fa-music"></i></button>
+                <!-- [INJECTED] Zen Mode Button -->
+                <button onclick="toggleZenMode()" title="Zen Mode (Deep Focus)" class="text-gray-400 hover:text-indigo-500 transition w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex justify-center items-center"><i class="fa-solid fa-compress" id="zenIcon"></i></button>
+                <button onclick="togglePomoSettings()" title="Settings" class="text-gray-400 hover:text-brand-500 transition w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex justify-center items-center"><i class="fa-solid fa-gear"></i></button>
+                <button onclick="togglePomodoroCollapse()" class="text-gray-400 hover:text-gray-600 transition w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex justify-center items-center"><i id="pomoCollapseIcon" class="fa-solid fa-chevron-down"></i></button>
+            </div>
+        </div>
+        
+        <div id="pomoSettings" class="hidden mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-sm border border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <label class="font-bold text-gray-600 dark:text-gray-300">Work (min)</label>
+                <input type="number" id="pomoWorkInput" value="25" class="w-16 p-1 rounded border dark:border-gray-600 bg-white dark:bg-gray-800 text-center focus:outline-none focus:ring-1 focus:ring-brand-500">
+            </div>
+            <div class="flex justify-between items-center mb-3">
+                <label class="font-bold text-gray-600 dark:text-gray-300">Break (min)</label>
+                <input type="number" id="pomoBreakInput" value="5" class="w-16 p-1 rounded border dark:border-gray-600 bg-white dark:bg-gray-800 text-center focus:outline-none focus:ring-1 focus:ring-brand-500">
+            </div>
+            <button onclick="savePomoSettings()" class="w-full py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-bold transition">Save Settings</button>
+        </div>
+
+        <div id="pomoContent" class="text-center overflow-hidden transition-all">
+            <div id="pomoDisplay" class="text-6xl font-black text-brand-600 dark:text-brand-400 tracking-wider font-mono mb-5 drop-shadow-sm">25:00</div>
+            <div class="flex justify-center gap-3">
+                <button onclick="startPomodoro()" class="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md transition">Start</button>
+                <button onclick="pausePomodoro()" class="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm shadow-md transition">Pause</button>
+                <button onclick="resetPomodoro()" class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl shadow-sm transition"><i class="fa-solid fa-rotate-right"></i></button>
+            </div>
+            <p class="text-xs font-bold text-gray-400 mt-4 uppercase tracking-wider" id="pomoStatus">Ready to focus!</p>
+        </div>
+    </div>
+
+    <script>
+        // API Configurations
+        const API_URL = '/api';
+        const FILES_URL = '/files';
+
+        // ---- Safety helpers ----
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        // for values placed inside onclick="fn('...')": JS-escape first, then HTML-escape
+        const escJs = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+        // local date as YYYY-MM-DD (toISOString() is UTC and shifts the day after midnight in Egypt)
+        const localDate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const emptyState = () => ({ subjects: [], pdfs: [], notes: [], tasks: [], flashcards: [], whiteboards: [], deadlines: [], links: [], activity: {}, subjectTimes: {}, pomodorosCompleted: 0, pomodoroDays: {}, currentSubjectId: null });
+        function normalizeState() {
+            ['subjects','pdfs','notes','tasks','flashcards','whiteboards','deadlines','links'].forEach(k => { if(!Array.isArray(state[k])) state[k] = []; });
+            ['activity','subjectTimes','pomodoroDays'].forEach(k => { if(!state[k] || typeof state[k] !== 'object') state[k] = {}; });
+            if(!state.pomodorosCompleted) state.pomodorosCompleted = 0;
+            state.subjects.forEach(s => { if(!s.icon) s.icon = iconsList[0]; if(!s.color) s.color = colorsList[0].grad; });
+        }
+        let dataLoaded = false, saveTimer = null, dirty = false;
+
+        // Small in-app text prompt (window.prompt() is not reliable inside the desktop window)
+        function requestInput(title, placeholder, callback) {
+            const wrap = document.createElement('div');
+            wrap.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4';
+            wrap.innerHTML = `<div class="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-100 dark:border-gray-700">
+                <h3 class="text-lg font-bold mb-4">${esc(title)}</h3>
+                <input type="text" class="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 dark:text-white" placeholder="${esc(placeholder)}">
+                <div class="flex justify-end gap-3 mt-5">
+                    <button data-act="cancel" class="px-5 py-2.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl font-semibold">Cancel</button>
+                    <button data-act="ok" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold">OK</button>
+                </div></div>`;
+            document.body.appendChild(wrap);
+            const input = wrap.querySelector('input'); input.focus();
+            const close = () => wrap.remove();
+            const ok = () => { const v = input.value.trim(); close(); if(v) callback(v); };
+            wrap.querySelector('[data-act=ok]').onclick = ok;
+            wrap.querySelector('[data-act=cancel]').onclick = close;
+            input.addEventListener('keydown', e => { if(e.key === 'Enter') ok(); if(e.key === 'Escape') close(); });
+        }
+
+        // Open saved links in the real browser (window.open does nothing inside the app window)
+        function openLink(url) {
+            fetch(`${API_URL}/open_url?url=${encodeURIComponent(url)}`).then(r => { if(!r.ok) showToast('Could not open link', true); }).catch(() => window.open(url, '_blank'));
+        }
+        function openSearchResult(sub, tab) {
+            closeSearchModal();
+            if(!state.subjects.some(s => s.id === sub)) return showToast('This subject no longer exists', true);
+            openSubject(sub); switchTab(tab);
+        }
+        function recordSubjectTime() {
+            if (subjectEntryTime > 0 && state.currentSubjectId) {
+                const mins = (Date.now() - subjectEntryTime) / 60000;
+                state.subjectTimes[state.currentSubjectId] = (state.subjectTimes[state.currentSubjectId] || 0) + mins;
+                subjectEntryTime = Date.now();
+            }
+        }
+        
+        // [INJECTED] Global Tracking Variables
+        let sessionStartTime = Date.now();
+        let subjectEntryTime = 0;
+        let draggedItem = null;
+        let selectedFiles = new Set();
+        let breakInterval;
+
+        let state = { 
+            subjects: [], pdfs: [], notes: [], tasks: [], 
+            flashcards: [], whiteboards: [], deadlines: [], links: [], activity: {}, 
+            subjectTimes: {}, pomodorosCompleted: 0, currentSubjectId: null 
+        };
+        
+        const iconsList = ['fa-graduation-cap', 'fa-book-open', 'fa-laptop-code', 'fa-calculator', 'fa-flask', 'fa-language', 'fa-brain', 'fa-chart-pie', 'fa-project-diagram', 'fa-atom', 'fa-globe', 'fa-paintbrush'];
+        const colorsList = [
+            { bg: 'bg-indigo-500', grad: 'from-indigo-600 to-blue-500' },
+            { bg: 'bg-emerald-500', grad: 'from-emerald-500 to-teal-400' },
+            { bg: 'bg-rose-500', grad: 'from-rose-500 to-pink-500' },
+            { bg: 'bg-amber-500', grad: 'from-amber-500 to-orange-400' },
+            { bg: 'bg-purple-500', grad: 'from-purple-600 to-indigo-500' },
+            { bg: 'bg-cyan-500', grad: 'from-cyan-500 to-blue-500' }
+        ];
+        
+        let selectedIcon = iconsList[0], selectedColor = colorsList[0].grad, isDarkMode = false;
+        let editingSubjectId = null, confirmAction = null;
+        const DEFAULT_FOLDERS = ["Lectures", "Tutorials", "Assignments", "Quizzes", "Labs", "References"];
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            setTheme(localStorage.getItem('hub_theme') === 'dark');
+            await loadData();
+            if (state.theme) setTheme(state.theme === 'dark');
+            
+            // Validate injected structures
+            if(!state.subjectTimes) state.subjectTimes = {};
+            if(!state.pomodorosCompleted) state.pomodorosCompleted = 0;
+
+            initSearch();
+            renderHeatmap();
+            updateUptimeStats();
+            setInterval(updateUptimeStats, 60000); // Check uptime every minute
+            setupSplitScreenResizer();
+            goToHome();
+
+            // Autosave: every 60s, also stores study time of the subject you're currently in
+            setInterval(() => {
+                recordSubjectTime();
+                if(state.currentSubjectId) dirty = true;
+                if(dirty) flushSave();
+            }, 60000);
+            // Last-chance save when the window closes or is hidden
+            const beaconSave = () => {
+                if(!dataLoaded) return;
+                recordSubjectTime();
+                try { navigator.sendBeacon(`${API_URL}/data`, new Blob([JSON.stringify(state)], { type: 'application/json' })); } catch(e) {}
+            };
+            window.addEventListener('beforeunload', beaconSave);
+            document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && dirty) flushSave(); });
+        });
+
+        function exitApp() {
+            requestConfirm("Are you sure you want to close the workspace?", async () => {
+                recordSubjectTime();
+                try { await flushSave(); await fetch('/api/exit', { method: 'POST' }); } catch(e) {}
+                window.close();
+            });
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch(`${API_URL}/data`);
+                if(!res.ok) throw new Error("Server error");
+                const data = await res.json();
+                if(data && Object.keys(data).length > 0) state = { ...state, ...data };
+                normalizeState();
+                dataLoaded = true;
+                updateServerStatus(true);
+            } catch (err) {
+                updateServerStatus(false);
+                showToast("Could not load your data - saving is paused so nothing gets overwritten.", true);
+            }
+        }
+
+        // Debounced: many actions in a row = one save (whiteboards make the data large)
+        function saveData() {
+            if(!dataLoaded) return;
+            dirty = true;
+            renderHeatmap();
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(flushSave, 400);
+        }
+        async function flushSave() {
+            if(!dataLoaded) return;
+            clearTimeout(saveTimer);
+            try {
+                const res = await fetch(`${API_URL}/data`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state) });
+                if(!res.ok) throw new Error('save failed');
+                dirty = false;
+                updateServerStatus(true);
+            } catch (err) {
+                updateServerStatus(false); showToast("Data not saved! Server error.", true);
+            }
+        }
+
+        // [INJECTED] Restore Backup
+        function importData(event) {
+            const input = event.target, file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if(!imported || !Array.isArray(imported.subjects)) throw new Error('bad backup');
+                    requestConfirm('Restoring a backup REPLACES all current data. Continue?', async () => {
+                        state = { ...emptyState(), ...imported, currentSubjectId: null };
+                        normalizeState(); dataLoaded = true;
+                        await flushSave(); goToHome(); renderHeatmap();
+                        showToast('Backup restored successfully! 🎉');
+                    });
+                } catch(err) { showToast('Invalid backup file!', true); }
+                input.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function updateServerStatus(isConnected) {
+            const el = document.getElementById('serverStatus'), dot = document.getElementById('statusDot'), txt = document.getElementById('statusText');
+            if(isConnected) {
+                dot.className = "w-2 h-2 rounded-full bg-emerald-500"; txt.textContent = "System Online";
+                el.className = "hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800";
+            } else {
+                dot.className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse"; txt.textContent = "Offline";
+                el.className = "hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800";
+            }
+        }
+
+        function showToast(msg, isError = false) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = `fixed top-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-xl text-white font-bold opacity-100 transition-opacity duration-300 z-50 shadow-xl ${isError ? 'bg-rose-500' : 'bg-brand-500'}`;
+            setTimeout(() => t.style.opacity = '0', 3000);
+        }
+
+        function setTheme(dark) {
+            isDarkMode = !!dark;
+            document.documentElement.classList.toggle('dark', isDarkMode);
+            localStorage.setItem('hub_theme', isDarkMode ? 'dark' : 'light');
+            state.theme = isDarkMode ? 'dark' : 'light';
+            document.getElementById('themeIcon').className = isDarkMode ? "fa-solid fa-sun text-yellow-400" : "fa-solid fa-moon";
+        }
+        function toggleDarkMode() { setTheme(!isDarkMode); saveData(); }
+
+        function trackActivity() {
+            const today = localDate();
+            state.activity[today] = (state.activity[today] || 0) + 1;
+            saveData(); 
+        }
+
+        function fireConfetti() {
+            for(let i=0; i<60; i++){
+                let c = document.createElement('div');
+                c.className = 'confetti';
+                c.style.left = Math.random() * 100 + 'vw';
+                c.style.backgroundColor = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'][Math.floor(Math.random()*5)];
+                c.style.animationDuration = (Math.random() * 2 + 1) + 's';
+                document.body.appendChild(c);
+                setTimeout(()=> c.remove(), 3000);
+            }
+        }
+
+        // [INJECTED] Audio Alerts & Focus Music
+        function playBeep() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+                osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.3);
+            } catch(e) {}
+        }
+
+        let loFiAudioCtx = null, loFiNoise = null, isLoFiPlaying = false;
+        function toggleLoFi() {
+            if (isLoFiPlaying) {
+                if(loFiNoise) loFiNoise.disconnect();
+                isLoFiPlaying = false;
+                document.getElementById('lofiIcon').classList.replace('fa-volume-high', 'fa-music');
+                showToast('Focus Music Paused'); return;
+            }
+            try {
+                if (!loFiAudioCtx) loFiAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const bufferSize = loFiAudioCtx.sampleRate * 2;
+                const buffer = loFiAudioCtx.createBuffer(1, bufferSize, loFiAudioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                let lastOut = 0;
+                for (let i = 0; i < bufferSize; i++) {
+                    const white = Math.random() * 2 - 1;
+                    output[i] = (lastOut + (0.02 * white)) / 1.02;
+                    lastOut = output[i]; output[i] *= 3.5;
+                }
+                loFiNoise = loFiAudioCtx.createBufferSource();
+                loFiNoise.buffer = buffer; loFiNoise.loop = true;
+                const gainNode = loFiAudioCtx.createGain();
+                gainNode.gain.value = 0.05;
+                loFiNoise.connect(gainNode); gainNode.connect(loFiAudioCtx.destination);
+                loFiNoise.start(); isLoFiPlaying = true;
+                document.getElementById('lofiIcon').classList.replace('fa-music', 'fa-volume-high');
+                showToast('Focus Music Playing 🎵');
+            } catch(e) { showToast('Audio not supported', true); }
+        }
+
+        function requestConfirm(message, callback) {
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmModal').classList.remove('hidden');
+            document.getElementById('confirmModalBox').classList.remove('scale-95');
+            document.getElementById('confirmModalBox').classList.add('scale-100');
+            confirmAction = callback;
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModalBox').classList.remove('scale-100');
+            document.getElementById('confirmModalBox').classList.add('scale-95');
+            setTimeout(() => document.getElementById('confirmModal').classList.add('hidden'), 200);
+            confirmAction = null;
+        }
+
+        function goToHome() {
+            // [INJECTED] Record Subject Time upon leaving
+            if (subjectEntryTime > 0 && state.currentSubjectId) {
+                const mins = (Date.now() - subjectEntryTime) / 60000;
+                state.subjectTimes[state.currentSubjectId] = (state.subjectTimes[state.currentSubjectId] || 0) + mins;
+                subjectEntryTime = 0; saveData();
+            }
+            state.currentSubjectId = null;
+            document.getElementById('subjectView').classList.add('hidden'); document.getElementById('homeView').classList.remove('hidden');
+            closeSplitScreen();
+            updateUptimeStats();
+            renderSubjectsGrid();
+        }
+
+        function openSubject(id) {
+            if(!state.subjects.some(s => s.id === id)) return;
+            selectedFiles.clear(); updateBulkBar();
+            state.currentSubjectId = id;
+            subjectEntryTime = Date.now(); // [INJECTED] Start Subject Timer
+            document.getElementById('homeView').classList.add('hidden');
+            document.getElementById('subjectView').classList.remove('hidden'); document.getElementById('subjectView').classList.add('flex');
+            updateActiveSubjectHeader();
+            switchTab('pdfs');
+        }
+
+        // [INJECTED] Uptime Stats logic
+        function updateUptimeStats() {
+            let activeMins = Math.floor((Date.now() - sessionStartTime) / 60000);
+            document.getElementById('uptimeStat').textContent = activeMins + 'm';
+            
+            let topSub = 'None', maxT = 0;
+            state.subjects.forEach(s => { if (state.subjectTimes[s.id] > maxT) { maxT = state.subjectTimes[s.id]; topSub = s.name; } });
+            document.getElementById('topSubStat').textContent = topSub;
+        }
+
+        // [INJECTED] Universal Drag and Drop engine logic
+        function dragStart(e, type, id, folder = null) {
+            e.stopPropagation(); draggedItem = { type, id, folder }; e.dataTransfer.effectAllowed = "move"; e.target.style.opacity = '0.5';
+        }
+        function dragOver(e) { e.preventDefault(); e.stopPropagation(); if(!e.currentTarget.classList.contains('drag-over')) e.currentTarget.classList.add('drag-over'); }
+        function dragLeave(e) { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('drag-over'); }
+        function drop(e, targetType, targetId, targetFolder = null) {
+            e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('drag-over');
+            document.querySelectorAll('[draggable]').forEach(el => el.style.opacity = '1');
+            if(!draggedItem || draggedItem.id === targetId) return;
+
+            if(draggedItem.type === 'file' && targetType === 'folder') {
+                const f = state.pdfs.find(p => p.id === draggedItem.id);
+                if(f) { f.folder = targetId; saveData(); renderFiles(); }
+                draggedItem = null; return;
+            }
+            if(draggedItem.type === 'folder' && targetType === 'folder') {
+                const sub = state.subjects.find(s => s.id === state.currentSubjectId);
+                const fromIdx = sub.folders.indexOf(draggedItem.id), toIdx = sub.folders.indexOf(targetId);
+                if(fromIdx > -1 && toIdx > -1) {
+                    const [moved] = sub.folders.splice(fromIdx, 1);
+                    sub.folders.splice(toIdx, 0, moved); saveData(); renderFiles();
+                }
+                draggedItem = null; return;
+            }
+            if(draggedItem.type === targetType) {
+                let arrKey = draggedItem.type + 's';
+                if(draggedItem.type === 'file') arrKey = 'pdfs';
+                if(draggedItem.type === 'subject') arrKey = 'subjects';
+                if(state[arrKey]) {
+                    const arr = state[arrKey];
+                    const fromIdx = arr.findIndex(i => i.id === draggedItem.id), toIdx = arr.findIndex(i => i.id === targetId);
+                    if(fromIdx > -1 && toIdx > -1) {
+                        const [moved] = arr.splice(fromIdx, 1);
+                        if(draggedItem.type === 'file' && targetFolder) moved.folder = targetFolder;
+                        arr.splice(toIdx, 0, moved); saveData();
+                        if(draggedItem.type === 'file') renderFiles();
+                        if(draggedItem.type === 'note') renderNotes();
+                        if(draggedItem.type === 'task') renderTasks();
+                        if(draggedItem.type === 'link') renderLinks();
+                        if(draggedItem.type === 'flashcard') renderFlashcards();
+                        if(draggedItem.type === 'deadline') renderDeadlines();
+                        if(draggedItem.type === 'subject') renderSubjectsGrid();
+                    }
+                }
+            }
+            draggedItem = null;
+        }
+
+        function updateActiveSubjectHeader() {
+            const sub = state.subjects.find(s => s.id === state.currentSubjectId); if(!sub) return;
+            document.getElementById('activeSubjectTitle').textContent = sub.name;
+            document.getElementById('activeSubjectIconBox').className = `w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg text-2xl bg-gradient-to-br ${sub.color}`;
+            document.getElementById('activeSubjectIconBox').innerHTML = `<i class="fa-solid ${sub.icon}"></i>`;
+            document.getElementById('editSubjectBtn').onclick = () => openSubjectModal(sub.id);
+            updateSubjectStats(sub.id);
+        }
+
+        function updateSubjectStats(id) {
+            const p = state.pdfs.filter(x=>x.subjectId===id).length, n = state.notes.filter(x=>x.subjectId===id).length, t = state.tasks.filter(x=>x.subjectId===id).length, d = state.deadlines.filter(x=>x.subjectId===id).length;
+            document.getElementById('activeSubjectStats').innerHTML = `
+                <span class="mr-2"><i class="fa-solid fa-folder-open"></i> ${p} Files</span> | 
+                <span class="mx-2"><i class="fa-solid fa-pen"></i> ${n} Notes</span> | 
+                <span class="mx-2"><i class="fa-solid fa-check"></i> ${t} Tasks</span> | 
+                <span class="ml-2"><i class="fa-solid fa-calendar"></i> ${d} Events</span>`;
+        }
+
+        function renderSubjectsGrid() {
+            const grid = document.getElementById('subjectsGrid');
+            grid.innerHTML = `
+                <div onclick="openSubjectModal()" class="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition min-h-[200px] group">
+                    <div class="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><i class="fa-solid fa-plus text-2xl text-gray-400"></i></div>
+                    <span class="font-bold text-gray-500 dark:text-gray-400">Add Subject</span>
+                </div>`;
+            
+            state.subjects.forEach(sub => {
+                const subPdfs = state.pdfs.filter(p => p.subjectId === sub.id).length;
+                const subTasks = state.tasks.filter(t => t.subjectId === sub.id);
+                const perc = subTasks.length ? Math.round((subTasks.filter(t=>t.completed).length/subTasks.length)*100) : 0;
+                const subDeadlines = state.deadlines.filter(d => d.subjectId === sub.id).length;
+                
+                grid.innerHTML += `
+                    <!-- [INJECTED] Draggable added to subject -->
+                    <div draggable="true" ondragstart="dragStart(event, 'subject', '${sub.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'subject', '${sub.id}')" class="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 cursor-pointer hover:shadow-lg transition-all relative group overflow-hidden transform hover:-translate-y-1" onclick="openSubject('${sub.id}')">
+                        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r ${sub.color}"></div>
+                        <div class="absolute top-5 right-5 flex gap-2 opacity-0 group-hover:opacity-100 transition z-10">
+                            <button onclick="event.stopPropagation(); openSubjectModal('${sub.id}')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-brand-500 hover:text-white flex items-center justify-center transition shadow-sm" title="Edit"><i class="fa-solid fa-pen text-sm"></i></button>
+                            <button onclick="deleteSubject(event, '${sub.id}')" class="w-8 h-8 rounded-full bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition shadow-sm" title="Delete"><i class="fa-solid fa-trash text-sm"></i></button>
+                        </div>
+                        <div class="flex items-center gap-4 mb-5 mt-2">
+                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br ${sub.color} flex items-center justify-center text-white shadow-lg text-2xl shrink-0"><i class="fa-solid ${sub.icon}"></i></div>
+                            <h2 class="text-xl font-bold line-clamp-2">${esc(sub.name)}</h2>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-500 dark:text-gray-400 mb-5 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700/50 pointer-events-none">
+                            <div class="flex items-center gap-2"><i class="fa-solid fa-folder-open text-blue-400"></i> ${subPdfs} Files</div>
+                            <div class="flex items-center gap-2"><i class="fa-solid fa-calendar-check text-purple-400"></i> ${subDeadlines} Events</div>
+                        </div>
+                        <!-- [INJECTED] Subject Progress Bar -->
+                        <div class="flex items-center gap-3 pointer-events-none">
+                            <span class="text-xs font-bold ${perc===100?'text-emerald-500':'text-gray-500'}">${perc}%</span>
+                            <div class="flex-grow h-2.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                                <div class="h-full bg-gradient-to-r ${sub.color} transition-all duration-500" style="width:${perc}%"></div>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+            document.querySelectorAll('[draggable]').forEach(el => el.addEventListener('dragend', () => el.style.opacity = '1'));
+        }
+
+        function renderPickers() {
+            document.getElementById('iconPicker').innerHTML = iconsList.map(ic => `
+                <div onclick="selectedIcon='${ic}'; renderPickers()" class="w-12 h-12 rounded-xl bg-gray-50 dark:bg-gray-700 border-2 ${ic===selectedIcon?'border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:border-brand-400 shadow-sm':'border-transparent'} flex items-center justify-center cursor-pointer hover:border-brand-300 transition text-lg"><i class="fa-solid ${ic}"></i></div>
+            `).join('');
+            document.getElementById('colorPicker').innerHTML = colorsList.map(c => `
+                <div onclick="selectedColor='${c.grad}'; renderPickers()" class="w-10 h-10 rounded-full cursor-pointer bg-gradient-to-br ${c.grad} shadow-sm border-2 ${c.grad===selectedColor?'border-gray-800 dark:border-white scale-110':'border-transparent'} transition-transform"></div>
+            `).join('');
+        }
+
+        function openSubjectModal(id = null) {
+            editingSubjectId = id;
+            document.getElementById('subjectModal').classList.remove('hidden');
+            const title = document.getElementById('modalTitle'), input = document.getElementById('subjectNameInput');
+            if(id) {
+                const sub = state.subjects.find(s => s.id === id);
+                title.innerHTML = '<i class="fa-solid fa-pen text-brand-500"></i> Edit Subject'; input.value = sub.name; selectedIcon = sub.icon; selectedColor = sub.color;
+            } else {
+                title.innerHTML = '<i class="fa-solid fa-layer-group text-brand-500"></i> Add Subject'; input.value = ''; selectedIcon = iconsList[0]; selectedColor = colorsList[0].grad;
+            }
+            renderPickers(); input.focus();
+        }
+        
+        function closeSubjectModal() { document.getElementById('subjectModal').classList.add('hidden'); }
+
+        function saveSubject() {
+            const name = document.getElementById('subjectNameInput').value.trim();
+            if(!name) return showToast('Please enter a subject name!', true);
+            if(editingSubjectId) {
+                const sub = state.subjects.find(s => s.id === editingSubjectId);
+                sub.name = name; sub.icon = selectedIcon; sub.color = selectedColor;
+                showToast('Subject updated successfully!');
+            } else {
+                state.subjects.push({ id: 'sub_' + Date.now(), name, icon: selectedIcon, color: selectedColor, folders: [...DEFAULT_FOLDERS] });
+                showToast('Subject created successfully! 🎉');
+            }
+            saveData(); closeSubjectModal(); renderSubjectsGrid(); 
+            if(state.currentSubjectId === editingSubjectId) updateActiveSubjectHeader();
+        }
+
+        function deleteSubject(e, id) {
+            e.stopPropagation();
+            requestConfirm("Delete this subject and all its files permanently?", () => {
+                const filesToDel = state.pdfs.filter(p => p.subjectId === id);
+                filesToDel.forEach(async (p) => { try { await fetch(`${API_URL}/delete_file/${p.filename}`, {method:'DELETE'}); } catch(err){} });
+                ['subjects', 'pdfs', 'notes', 'tasks', 'flashcards', 'whiteboards', 'deadlines', 'links'].forEach(key => {
+                    state[key] = state[key].filter(x => (x.id !== id && x.subjectId !== id));
+                });
+                delete state.subjectTimes[id]; saveData(); renderSubjectsGrid(); showToast('Subject deleted successfully');
+            });
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`content-${tabId}`).classList.remove('hidden');
+            const baseClass = "tab-btn px-5 py-2.5 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ";
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.className = baseClass + "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 border-b-2 border-transparent");
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            if(activeBtn) activeBtn.className = baseClass + "text-brand-600 border-b-2 border-brand-600 dark:text-brand-400 dark:border-brand-400 bg-brand-50 dark:bg-brand-900/20";
+            
+            if(tabId === 'pdfs') renderFiles();
+            if(tabId === 'notes') renderNotes();
+            if(tabId === 'tasks') renderTasks();
+            if(tabId === 'links') renderLinks();
+            if(tabId === 'flashcards') renderFlashcards();
+            if(tabId === 'deadlines') renderDeadlines();
+            if(tabId === 'whiteboard') { setTimeout(() => { initWhiteboard(); renderSavedWhiteboards(); }, 50); }
+        }
+
+        // ================= FILES SYSTEM =================
+        function ensureFoldersExist(sub) { if(!sub.folders || sub.folders.length === 0) sub.folders = [...DEFAULT_FOLDERS]; }
+
+        function promptNewFolder() {
+            requestInput('New folder', 'e.g., Code, Cheat Sheets', (folderName) => {
+                const sub = state.subjects.find(s => s.id === state.currentSubjectId);
+                if(!sub) return;
+                ensureFoldersExist(sub);
+                if(!sub.folders.includes(folderName)) {
+                    sub.folders.push(folderName); saveData(); renderFiles(); showToast("Folder created!");
+                } else showToast("Folder already exists!", true);
+            });
+        }
+
+        async function handleFileUpload(e) {
+            const files = e.target.files; 
+            if(!files || files.length === 0) return;
+            showToast(`Uploading ${files.length} file(s)... ⏳`);
+            
+            const selectedFolder = document.getElementById('folderSelect').value || 'General';
+            const fd = new FormData(); 
+            for(let i=0; i<files.length; i++) fd.append('files[]', files[i]);
+            fd.append('subject_id', state.currentSubjectId);
+            fd.append('folder', selectedFolder);
+
+            try {
+                const res = await fetch(`${API_URL}/upload_file`, { method: 'POST', body: fd });
+                const result = await res.json();
+                if(result.status === 'success' && result.files) {
+                    result.files.forEach(f => {
+                        state.pdfs.push({ id: 'file_' + Date.now() + Math.random(), subjectId: state.currentSubjectId, original_name: f.original_name, filename: f.filename, folder: f.folder });
+                    });
+                    saveData(); renderFiles(); updateSubjectStats(state.currentSubjectId); 
+                    showToast(`${result.files.length} file(s) uploaded! ✅`);
+                    if(result.skipped && result.skipped.length) showToast(`Skipped unsupported: ${result.skipped.join(', ')}`, true);
+                } else { showToast(result.error || 'Upload failed', true); }
+            } catch (err) { showToast('Upload failed. Ensure server is running.', true); }
+            e.target.value = '';
+        }
+
+        // [INJECTED] Dynamic File Icons Update
+        function getFileIconInfo(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            if (['pdf'].includes(ext)) return { icon: 'fa-file-pdf', color: 'text-red-500', isSplitable: true };
+            if (['doc', 'docx'].includes(ext)) return { icon: 'fa-file-word', color: 'text-blue-600', isSplitable: false };
+            if (['ppt', 'pptx'].includes(ext)) return { icon: 'fa-file-powerpoint', color: 'text-orange-500', isSplitable: false };
+            if (['xls', 'xlsx'].includes(ext)) return { icon: 'fa-file-excel', color: 'text-emerald-600', isSplitable: false };
+            if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) return { icon: 'fa-file-image', color: 'text-purple-500', isSplitable: true, isImage: true };
+            return { icon: 'fa-file', color: 'text-gray-400', isSplitable: false };
+        }
+
+        // [INJECTED] Bulk Delete logic
+        function toggleSelectFile(id) { if(selectedFiles.has(id)) selectedFiles.delete(id); else selectedFiles.add(id); updateBulkBar(); }
+        function selectAllFiles() { state.pdfs.filter(p => p.subjectId === state.currentSubjectId).forEach(p => selectedFiles.add(p.id)); renderFiles(); updateBulkBar(); }
+        function updateBulkBar() {
+            const bar = document.getElementById('bulkActionBar');
+            if(selectedFiles.size > 0) { bar.classList.remove('hidden'); document.getElementById('bulkCount').textContent = selectedFiles.size; } 
+            else { bar.classList.add('hidden'); }
+        }
+        async function bulkDeleteFiles() {
+            requestConfirm(`Delete ${selectedFiles.size} selected files?`, async () => {
+                for(let id of selectedFiles) {
+                    const f = state.pdfs.find(x => x.id === id);
+                    if(f) {
+                        try { await fetch(`${API_URL}/delete_file/${f.filename}`, { method: 'DELETE' }); } catch(e){}
+                        state.pdfs = state.pdfs.filter(x => x.id !== id);
+                    }
+                }
+                selectedFiles.clear(); saveData(); renderFiles(); updateSubjectStats(state.currentSubjectId); updateBulkBar(); showToast('Files deleted!');
+            });
+        }
+
+        function renderFiles() {
+            const sub = state.subjects.find(s => s.id === state.currentSubjectId);
+            if(!sub) return;
+            ensureFoldersExist(sub);
+            document.getElementById('folderSelect').innerHTML = sub.folders.map(f => `<option value="${esc(f)}">📁 ${esc(f)}</option>`).join('');
+            const container = document.getElementById('pdfsContainer'); container.innerHTML = '';
+            
+            sub.folders.forEach((folder, idx) => {
+                const folderJs = escJs(folder), folderH = esc(folder);
+                const fFiles = state.pdfs.filter(p => p.subjectId === state.currentSubjectId && (p.folder === folder || (!p.folder && folder === "Lectures")));
+                const isHidden = fFiles.length === 0 ? 'hidden' : '';
+                
+                container.innerHTML += `
+                    <!-- [INJECTED] Draggable folder -->
+                    <div draggable="true" ondragstart="dragStart(event, 'folder', '${folderJs}')" class="pdf-folder shadow-sm transition-all" data-folder="${folderH}" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'folder', '${folderJs}')">
+                        <div class="folder-header" onclick="document.getElementById('fc_${idx}').classList.toggle('hidden')">
+                            <span class="flex items-center gap-2 pointer-events-none"><i class="fa-solid fa-folder text-brand-400"></i> ${folderH}</span>
+                            <span class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2.5 py-1 rounded-full font-bold pointer-events-none">${fFiles.length} files</span>
+                        </div>
+                        <div id="fc_${idx}" class="folder-content border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 ${isHidden}">
+                            ${fFiles.length === 0 ? '<p class="text-gray-400 text-sm italic col-span-full text-center py-4 pointer-events-none">Folder is empty</p>' : 
+                            fFiles.map(p => {
+                                const info = getFileIconInfo(p.original_name);
+                                const isChecked = selectedFiles.has(p.id) ? 'checked' : '';
+                                return `
+                                <!-- [INJECTED] Draggable file & Bulk Select Checkbox -->
+                                <div draggable="true" ondragstart="dragStart(event, 'file', '${p.id}', '${folderJs}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'file', '${p.id}', '${folderJs}')" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-4 hover:shadow-md transition group relative flex flex-col">
+                                    <input type="checkbox" class="file-checkbox absolute top-2 left-2 w-4 h-4 z-20 cursor-pointer" onchange="toggleSelectFile('${p.id}')" ${isChecked}>
+                                    <button onclick="deleteFile(event, '${p.id}', '${p.filename}')" class="absolute top-2 right-2 text-rose-400 opacity-0 group-hover:opacity-100 hover:text-rose-600 transition w-7 h-7 bg-white dark:bg-gray-800 rounded shadow-sm flex items-center justify-center"><i class="fa-solid fa-trash text-xs"></i></button>
+                                    <div class="text-center mb-3 mt-2 pointer-events-none"><i class="fa-solid ${info.icon} ${info.color} text-4xl drop-shadow-sm"></i></div>
+                                    <h4 class="text-sm font-bold text-center mb-4 line-clamp-2 flex-grow pointer-events-none" title="${esc(p.original_name)}">${esc(p.original_name)}</h4>
+                                    <div class="flex gap-2 w-full mt-auto flex-wrap">
+                                        <button onclick="openNativeFile('${p.filename}')" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-bold text-xs transition">Open</button>
+                                        <button onclick="downloadFile('${escJs(p.filename)}', '${escJs(p.original_name)}')" title="Download" class="py-2 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-bold text-xs transition"><i class="fa-solid fa-download"></i></button>
+                                        ${info.isSplitable ? `<button onclick="splitScreenFile('${p.filename}', ${info.isImage})" class="w-full mt-2 py-2 bg-brand-50 hover:bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:hover:bg-brand-900/50 dark:text-brand-300 border border-brand-200 dark:border-brand-800 rounded-lg font-bold text-xs transition">Split Screen</button>` : `<button onclick="showToast('Split Screen is only for PDF and Images', true)" class="w-full mt-2 py-2 bg-gray-50 text-gray-400 dark:bg-gray-800 dark:text-gray-500 border border-gray-200 dark:border-gray-700 rounded-lg font-bold text-xs cursor-not-allowed">Split Screen</button>`}
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                    </div>`;
+            });
+            document.querySelectorAll('[draggable]').forEach(el => el.addEventListener('dragend', () => el.style.opacity = '1'));
+        }
+
+        async function openNativeFile(filename) {
+            try { showToast("Opening file with native app... 🚀"); await fetch(`${API_URL}/open_file/${filename}`); } catch(e) { showToast("Error opening file", true); }
+        }
+        function downloadFile(filename, originalName) {
+            const a = document.createElement('a'); a.href = `${FILES_URL}/${filename}`; a.download = originalName; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }
+
+        let currentScale = 1, isDragging = false, startX, startY, transX = 0, transY = 0;
+
+        function splitScreenFile(filename, isImage = false) {
+            document.getElementById('pdfsContainer').classList.add('hidden');
+            if(document.getElementById('bulkActionBar')) document.getElementById('bulkActionBar').classList.add('hidden');
+            document.getElementById('pdfSplitArea').classList.remove('hidden'); document.getElementById('pdfSplitArea').classList.add('flex');
+            document.getElementById('splitScreenBtn').classList.add('hidden');
+            
+            const iframe = document.getElementById('pdfFrame'), img = document.getElementById('zoomableImage'), zoomControls = document.getElementById('zoomControls');
+            if(isImage) {
+                iframe.classList.add('hidden'); img.classList.remove('hidden'); zoomControls.classList.remove('hidden');
+                img.src = `${FILES_URL}/${filename}`; resetZoom();
+            } else {
+                img.classList.add('hidden'); zoomControls.classList.add('hidden'); iframe.classList.remove('hidden');
+                iframe.src = `${FILES_URL}/${filename}`;
+            }
+        }
+        
+        function zoomImage(step) { currentScale = Math.max(0.5, Math.min(currentScale + step, 5)); updateImageTransform(); }
+        function resetZoom() { currentScale = 1; transX = 0; transY = 0; updateImageTransform(); }
+        function updateImageTransform() { document.getElementById('zoomableImage').style.transform = `translate(${transX}px, ${transY}px) scale(${currentScale})`; }
+
+        const imgEl = document.getElementById('zoomableImage');
+        imgEl.addEventListener('mousedown', (e) => { isDragging = true; startX = e.clientX - transX; startY = e.clientY - transY; imgEl.style.cursor = 'grabbing'; });
+        window.addEventListener('mouseup', () => { isDragging = false; imgEl.style.cursor = 'move'; });
+        window.addEventListener('mousemove', (e) => { if(!isDragging) return; transX = e.clientX - startX; transY = e.clientY - startY; updateImageTransform(); });
+
+        // [INJECTED] Resizable Split Screen Logic
+        function setupSplitScreenResizer() {
+            const resizer = document.getElementById('resizer');
+            const leftPanel = document.getElementById('splitNotesPanel');
+            const rightPanel = document.getElementById('splitViewContainer');
+            const container = document.getElementById('pdfSplitArea');
+            let isResizing = false;
+            if(!resizer) return;
+            resizer.addEventListener('mousedown', () => isResizing = true);
+            document.addEventListener('mousemove', (e) => {
+                if(!isResizing) return;
+                let newWidth = (e.clientX - container.getBoundingClientRect().left) / container.clientWidth * 100;
+                if(newWidth > 20 && newWidth < 80) { leftPanel.style.width = `${newWidth}%`; rightPanel.style.width = `${100 - newWidth}%`; }
+            });
+            document.addEventListener('mouseup', () => isResizing = false);
+        }
+
+        function closeSplitScreen() {
+            document.getElementById('pdfSplitArea').classList.add('hidden'); document.getElementById('pdfSplitArea').classList.remove('flex');
+            document.getElementById('pdfsContainer').classList.remove('hidden');
+            document.getElementById('pdfFrame').src = ''; document.getElementById('zoomableImage').src = '';
+            updateBulkBar();
+        }
+
+        function deleteFile(e, id, filename) {
+            e.stopPropagation(); 
+            requestConfirm('Permanently delete this file?', async () => {
+                try {
+                    await fetch(`${API_URL}/delete_file/${filename}`, { method: 'DELETE' });
+                    state.pdfs = state.pdfs.filter(x => x.id !== id); 
+                    saveData(); renderFiles(); updateSubjectStats(state.currentSubjectId); showToast('File deleted');
+                } catch(err) { showToast('Deletion failed', true); }
+            });
+        }
+
+        // ================= NOTES SYSTEM =================
+        function saveSplitNote() {
+            const val = document.getElementById('splitNoteInput').value.trim(); if(!val) return;
+            state.notes.unshift({ id: 'note_'+Date.now(), subjectId: state.currentSubjectId, text: val, date: new Date().toLocaleDateString('en-GB') });
+            saveData(); trackActivity(); updateSubjectStats(state.currentSubjectId); 
+            document.getElementById('splitNoteInput').value = ''; showToast('Note saved');
+        }
+
+        function addNote() {
+            const val = document.getElementById('noteInput').value.trim(); if(!val) return;
+            state.notes.unshift({ id: 'note_'+Date.now(), subjectId: state.currentSubjectId, text: val, date: new Date().toLocaleDateString('en-GB') });
+            saveData(); trackActivity(); renderNotes(); updateSubjectStats(state.currentSubjectId); document.getElementById('noteInput').value = '';
+        }
+        
+        function renderNotes() {
+            document.getElementById('notesList').innerHTML = state.notes.filter(n=>n.subjectId===state.currentSubjectId).map(n => `
+                <!-- [INJECTED] Draggable Note -->
+                <div draggable="true" ondragstart="dragStart(event, 'note', '${n.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'note', '${n.id}')" class="bg-yellow-50 dark:bg-yellow-900/20 p-5 rounded-2xl border border-yellow-200 dark:border-yellow-800/50 relative group shadow-sm">
+                    <button onclick="deleteItem('notes','${n.id}')" class="absolute top-3 right-3 text-rose-500 opacity-0 group-hover:opacity-100 transition bg-white dark:bg-gray-800 w-8 h-8 rounded-lg shadow-sm flex items-center justify-center pointer-events-auto z-10"><i class="fa-solid fa-trash text-sm"></i></button>
+                    <p class="whitespace-pre-wrap text-sm font-semibold mb-4 leading-relaxed text-gray-800 dark:text-gray-200 pr-8 pointer-events-none">${esc(n.text)}</p>
+                    <div class="text-xs text-yellow-600 dark:text-yellow-500 font-bold flex items-center gap-1 pointer-events-none"><i class="fa-regular fa-clock"></i> ${n.date}</div>
+                </div>`).join('');
+            document.querySelectorAll('[draggable]').forEach(el => el.addEventListener('dragend', () => el.style.opacity = '1'));
+        }
+
+        // ================= TASKS SYSTEM =================
+        function addTask() {
+            const val = document.getElementById('taskInput').value.trim(); if(!val) return;
+            state.tasks.push({ id: 'task_'+Date.now(), subjectId: state.currentSubjectId, text: val, completed: false });
+            saveData(); trackActivity(); renderTasks(); updateSubjectStats(state.currentSubjectId); document.getElementById('taskInput').value = '';
+        }
+        function toggleTask(id) {
+            const t = state.tasks.find(x=>x.id===id); t.completed = !t.completed;
+            saveData(); renderTasks(); if(t.completed){ trackActivity(); fireConfetti(); }
+        }
+        function renderTasks() {
+            const subT = state.tasks.filter(t=>t.subjectId===state.currentSubjectId);
+            const comp = subT.filter(t=>t.completed).length; 
+            const perc = subT.length ? Math.round((comp/subT.length)*100) : 0;
+            
+            document.getElementById('taskProgressBar').style.width = `${perc}%`; document.getElementById('taskProgressText').textContent = `${perc}% Completed`; document.getElementById('taskCountText').textContent = `${subT.length - comp} tasks remaining`;
+            document.getElementById('tasksList').innerHTML = subT.map(t => `
+                <!-- [INJECTED] Draggable Task -->
+                <div draggable="true" ondragstart="dragStart(event, 'task', '${t.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'task', '${t.id}')" class="flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl group shadow-sm hover:shadow-md transition">
+                    <div onclick="toggleTask('${t.id}')" class="w-6 h-6 rounded border-2 flex items-center justify-center cursor-pointer transition-colors ${t.completed?'bg-emerald-500 border-emerald-500 text-white':'border-gray-300 dark:border-gray-500 text-transparent hover:border-emerald-400'}"><i class="fa-solid fa-check text-xs"></i></div>
+                    <span class="flex-grow font-bold text-[15px] transition-all pointer-events-none ${t.completed?'line-through text-gray-400 dark:text-gray-500':'text-gray-700 dark:text-gray-200'}">${esc(t.text)}</span>
+                    <button onclick="deleteItem('tasks','${t.id}')" class="text-gray-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"><i class="fa-solid fa-trash"></i></button>
+                </div>`).join('');
+            document.querySelectorAll('[draggable]').forEach(el => el.addEventListener('dragend', () => el.style.opacity = '1'));
+        }
+
+        // ================= LINKS SYSTEM =================
+        function addLink() {
+            const title = document.getElementById('linkTitle').value.trim(), url = document.getElementById('linkUrl').value.trim();
+            if(!title || !url) return showToast('Please enter Title and URL!', true);
+            let safeUrl = url.startsWith('http') ? url : `https://${url}`;
+            state.links.push({ id: 'link_'+Date.now(), subjectId: state.currentSubjectId, title, url: safeUrl });
+            saveData(); trackActivity(); renderLinks(); document.getElementById('linkTitle').value = ''; document.getElementById('linkUrl').value = '';
+        }
+        function renderLinks() {
+            document.getElementById('linksList').innerHTML = (state.links || []).filter(l=>l.subjectId===state.currentSubjectId).map(l => `
+                <!-- [INJECTED] Draggable Link -->
+                <div draggable="true" ondragstart="dragStart(event, 'link', '${l.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'link', '${l.id}')" class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl group shadow-sm hover:shadow-md transition border-l-4 border-l-brand-500">
+                    <div class="flex items-center gap-4 overflow-hidden pointer-events-none">
+                        <div class="w-10 h-10 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-500 flex items-center justify-center shrink-0"><i class="fa-solid fa-link"></i></div>
+                        <div class="overflow-hidden">
+                            <h4 class="font-bold text-gray-800 dark:text-gray-100 truncate">${esc(l.title)}</h4>
+                            <p class="text-xs text-brand-500 truncate hover:underline cursor-pointer pointer-events-auto" onclick="openLink('${escJs(l.url)}')">${esc(l.url)}</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        <button onclick="openLink('${escJs(l.url)}')" class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded font-bold text-xs hover:bg-gray-200 dark:hover:bg-gray-600 transition">Open</button>
+                        <button onclick="deleteItem('links','${l.id}')" class="text-gray-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition w-8 flex justify-center items-center"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>`).join('');
+            document.querySelectorAll('[draggable]').forEach(el => el.addEventListener('dragend', () => el.style.opacity = '1'));
+        }
+
+        // ================= DEADLINES SYSTEM =================
+        function addDeadline() {
+            const title = document.getElementById('dlTitle').value.trim(), type = document.getElementById('dlType').value, date = document.getElementById('dlDate').value;
+            if(!title || !date) return showToast('Enter title and date!', true);
+            state.deadlines.push({ id: 'dl_'+Date.now(), subjectId: state.currentSubjectId, title, type, date });
+            saveData(); trackActivity(); renderDeadlines(); updateSubjectStats(state.currentSubjectId); document.getElementById('dlTitle').value = '';
+        }
+        function renderDeadlines() {
+            let subDls = state.deadlines.filter(d => d.subjectId === state.currentSubjectId); // Not forcing sort by date anymore to allow Custom Drag&Drop
+            const today = new Date(); today.setHours(0,0,0,0);
+            document.getElementById('deadlinesList').innerHTML = subDls.length === 0 ? 
+                '<div class="text-center p-8 text-gray-400 font-bold"><i class="fa-regular fa-calendar-xmark text-4xl mb-3"></i><p>No upcoming events</p></div>' :
+                subDls.map(d => {
+                    const dDate = new Date(d.date + 'T00:00:00'), diffDays = Math.round((dDate - today) / (1000 * 60 * 60 * 24));
+                    let statusHtml = '', borderClass = 'border-gray-200 dark:border-gray-700';
+                    if(diffDays < 0) { statusHtml = `<span class="bg-rose-100 text-rose-600 px-2.5 py-1 rounded-md text-xs font-bold">Ended</span>`; borderClass = 'border-rose-300 border-l-4 border-l-rose-500'; }
+                    else if (diffDays === 0) { statusHtml = `<span class="bg-orange-100 text-orange-600 px-2.5 py-1 rounded-md text-xs font-bold animate-pulse">Due Today!</span>`; borderClass = 'border-orange-300 border-l-4 border-l-orange-500'; }
+                    else if (diffDays <= 3) { statusHtml = `<span class="bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded-md text-xs font-bold">${diffDays} Days Left</span>`; borderClass = 'border-yellow-300 border-l-4 border-l-yellow-500'; }
+                    else { statusHtml = `<span class="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-md text-xs font-bold">${diffDays} Days Left</span>`; borderClass = 'border-emerald-300 border-l-4 border-l-emerald-500'; }
+                    return `
+                    <!-- [INJECTED] Draggable Deadline -->
+                    <div draggable="true" ondragstart="dragStart(event, 'deadline', '${d.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'deadline', '${d.id}')" class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border rounded-xl shadow-sm group ${borderClass}">
+                        <div class="flex items-center gap-4 pointer-events-none">
+                            <div class="w-14 h-14 rounded-full bg-gray-50 dark:bg-gray-900 flex flex-col justify-center items-center shrink-0 border border-gray-100 dark:border-gray-700">
+                                <span class="text-xs font-bold text-gray-400">${dDate.toLocaleString('en-US', { month: 'short' }).toUpperCase()}</span>
+                                <span class="text-xl font-black text-brand-600">${dDate.getDate()}</span>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-gray-800 dark:text-gray-100 text-lg">${esc(d.title)}</h4>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wider font-semibold">${esc(d.type)}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">${statusHtml}<button onclick="deleteItem('deadlines','${d.id}')" class="text-gray-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition w-8 h-8 flex justify-center items-center pointer-events-auto"><i class="fa-solid fa-trash"></i></button></div>
+                    </div>`;
+            }).join('');
+            document.querySelectorAll('[draggable]').forEach(el => el.addEventListener('dragend', () => el.style.opacity = '1'));
+        }
+
+        // ================= FLASHCARDS =================
+        function addFlashcard() {
+            const type = document.getElementById('fcType').value, q = document.getElementById('fcQuestion').value.trim(), a = document.getElementById('fcAnswer').value.trim();
+            if(!q || !a) return showToast('Enter Question & Answer!', true);
+            state.flashcards.push({ id: 'fc_'+Date.now(), subjectId: state.currentSubjectId, type, q, a });
+            saveData(); trackActivity(); renderFlashcards(); document.getElementById('fcQuestion').value=''; document.getElementById('fcAnswer').value='';
+        }
+        function renderFlashcards() {
+            const typeColors = { 'Definition': 'bg-blue-500', 'Formula': 'bg-purple-500', 'Code': 'bg-emerald-500', 'Note': 'bg-amber-500' };
+            document.getElementById('flashcardsList').innerHTML = state.flashcards.filter(f=>f.subjectId===state.currentSubjectId).map(f => `
+                <!-- [INJECTED] Draggable Flashcard -->
+                <div draggable="true" ondragstart="dragStart(event, 'flashcard', '${f.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'flashcard', '${f.id}')" class="relative h-56 perspective-1000 cursor-pointer group" onclick="this.querySelector('.inner').classList.toggle('is-flipped')">
+                    <button onclick="event.stopPropagation(); deleteItem('flashcards','${f.id}')" class="absolute top-2 right-2 z-10 text-rose-500 opacity-0 group-hover:opacity-100 bg-white dark:bg-gray-800 p-1.5 rounded-lg shadow pointer-events-auto"><i class="fa-solid fa-trash"></i></button>
+                    <div class="inner w-full h-full relative transform-style-3d shadow-sm hover:shadow-lg transition-all rounded-2xl pointer-events-none">
+                        <div class="absolute w-full h-full backface-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl flex flex-col items-center justify-center p-6 text-center overflow-hidden">
+                            <div class="absolute top-0 left-0 w-full h-1.5 ${typeColors[f.type] || 'bg-brand-500'}"></div>
+                            <span class="absolute top-4 left-4 text-[10px] font-bold text-white ${typeColors[f.type] || 'bg-brand-500'} px-2 py-0.5 rounded shadow-sm uppercase tracking-wide">${esc(f.type)}</span>
+                            <span class="font-bold text-xl text-gray-800 dark:text-gray-100 mt-4">${esc(f.q)}</span>
+                            <span class="absolute bottom-4 text-xs font-semibold text-gray-400"><i class="fa-solid fa-hand-pointer"></i> Click to flip</span>
+                        </div>
+                        <div class="absolute w-full h-full backface-hidden bg-gradient-to-br from-brand-600 to-indigo-600 text-white rounded-2xl flex items-center justify-center p-6 text-center font-bold rotate-y-180 text-lg overflow-auto shadow-inner">
+                            ${esc(f.a)}
+                        </div>
+                    </div>
+                </div>`).join('');
+            document.querySelectorAll('[draggable]').forEach(el => el.addEventListener('dragend', () => el.style.opacity = '1'));
+        }
+
+        function deleteItem(type, id) {
+            requestConfirm('Delete this item?', () => {
+                state[type] = state[type].filter(x => x.id !== id); saveData();
+                if(type==='notes') renderNotes(); if(type==='tasks') renderTasks(); if(type==='links') renderLinks();
+                if(type==='flashcards') renderFlashcards(); if(type==='deadlines') renderDeadlines(); if(type==='whiteboards') renderSavedWhiteboards();
+                updateSubjectStats(state.currentSubjectId); showToast('Item deleted');
+            });
+        }
+
+        // ================= WHITEBOARD =================
+        let canvas, ctx, isDrawing = false;
+        function initWhiteboard() {
+            canvas = document.getElementById('whiteboardCanvas'); if(!canvas) return;
+            const container = document.getElementById('canvasContainer');
+            canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+            ctx = canvas.getContext('2d'); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            canvas.style.touchAction = 'none';
+            let last = null;
+            const pos = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+            canvas.onpointerdown = (e) => { isDrawing = true; last = pos(e); canvas.setPointerCapture(e.pointerId);
+                ctx.fillStyle = document.getElementById('wbColor').value; ctx.beginPath(); ctx.arc(last[0], last[1], document.getElementById('wbSize').value / 2, 0, Math.PI * 2); ctx.fill(); };
+            canvas.onpointermove = (e) => { if(!isDrawing) return; const p = pos(e);
+                ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(p[0], p[1]);
+                ctx.strokeStyle = document.getElementById('wbColor').value; ctx.lineWidth = document.getElementById('wbSize').value; ctx.stroke(); last = p; };
+            canvas.onpointerup = canvas.onpointercancel = () => { isDrawing = false; };
+        }
+        function clearWhiteboard() { ctx.clearRect(0,0,canvas.width,canvas.height); }
+        function saveWhiteboard() {
+            const tempCanvas = document.createElement('canvas'); tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+            const tCtx = tempCanvas.getContext('2d'); tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height); tCtx.drawImage(canvas, 0, 0);
+            state.whiteboards.unshift({ id: 'wb_'+Date.now(), subjectId: state.currentSubjectId, img: tempCanvas.toDataURL('image/jpeg', 0.8) });
+            saveData(); trackActivity(); renderSavedWhiteboards(); clearWhiteboard(); showToast('Saved to gallery 🖼️');
+        }
+        function loadWhiteboardToCanvas(id) {
+            const wb = state.whiteboards.find(w => w.id === id); if(!wb) return;
+            const img = new Image();
+            img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); showToast('Whiteboard loaded! 🎨'); };
+            img.src = wb.img;
+        }
+        function renderSavedWhiteboards() {
+            document.getElementById('savedWhiteboards').innerHTML = state.whiteboards.filter(w=>w.subjectId===state.currentSubjectId).map(w => `
+                <div class="relative w-40 h-24 shrink-0 border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden group shadow-sm hover:shadow-md transition">
+                    <img src="${w.img}" class="w-full h-full object-cover cursor-pointer" onclick="loadWhiteboardToCanvas('${w.id}')" title="Click to load into canvas">
+                    <div class="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none transition text-white text-sm font-bold tracking-wide">Edit</div>
+                    <button onclick="deleteItem('whiteboards', '${w.id}')" class="absolute top-1 right-1 bg-rose-500 hover:bg-rose-600 text-white rounded p-1.5 text-xs opacity-0 group-hover:opacity-100 transition z-10"><i class="fa-solid fa-trash"></i></button>
+                </div>`).join('');
+        }
+
+        // ================= POMODORO & ZEN MODE =================
+        let pomoInterval, pomoTime = 25*60, isPomo = false, pomoMode = 'w';
+        let customWork = 25, customBreak = 5;
+        function togglePomoSettings() { document.getElementById('pomoSettings').classList.toggle('hidden'); }
+        function savePomoSettings() {
+            customWork = parseInt(document.getElementById('pomoWorkInput').value) || 25;
+            customBreak = parseInt(document.getElementById('pomoBreakInput').value) || 5;
+            togglePomoSettings(); showToast('Settings Saved!');
+            if(!isPomo) resetPomodoro(); 
+        }
+        function updatePomo() {
+            let m = Math.floor(pomoTime/60).toString().padStart(2,'0'), s = (pomoTime%60).toString().padStart(2,'0');
+            document.getElementById('pomoDisplay').textContent = `${m}:${s}`; 
+        }
+
+        // [INJECTED] Break Modal Functions
+        function triggerBreakModal() {
+            document.getElementById('breakModal').classList.remove('hidden'); document.getElementById('breakModal').classList.add('flex');
+            pomoTime = customBreak * 60; updateBreakDisplay();
+            breakInterval = setInterval(() => {
+                if(pomoTime > 0) { pomoTime--; updateBreakDisplay(); }
+                else { clearInterval(breakInterval); skipBreak(); playBeep(); showToast("Break is over! Let's get back to work."); }
+            }, 1000);
+        }
+        function updateBreakDisplay() {
+            let m = Math.floor(pomoTime/60).toString().padStart(2,'0'), s = (pomoTime%60).toString().padStart(2,'0');
+            document.getElementById('breakDisplay').textContent = `${m}:${s}`;
+        }
+        function pauseBreak() {
+            const btn = document.getElementById('pauseBreakBtn');
+            if(breakInterval) { clearInterval(breakInterval); breakInterval = null; btn.innerHTML = '<i class="fa-solid fa-play"></i> Resume'; }
+            else { 
+                btn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+                breakInterval = setInterval(() => {
+                    if(pomoTime > 0) { pomoTime--; updateBreakDisplay(); }
+                    else { clearInterval(breakInterval); skipBreak(); playBeep(); }
+                }, 1000);
+            }
+        }
+        function skipBreak() {
+            clearInterval(breakInterval); breakInterval = null; document.getElementById('breakModal').classList.add('hidden'); document.getElementById('breakModal').classList.remove('flex');
+            resetPomodoro(); document.getElementById('pauseBreakBtn').innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+        }
+
+        function startPomodoro() {
+            if(isPomo) return; isPomo = true; 
+            document.getElementById('pomoStatus').textContent = '🔥 Deep focus session...';
+            pomoInterval = setInterval(() => {
+                if(pomoTime > 0) { pomoTime--; updatePomo(); }
+                else {
+                    clearInterval(pomoInterval); isPomo = false; playBeep(); fireConfetti(); trackActivity(); 
+                    // [INJECTED] Update Focus Ring stat
+                    state.pomodorosCompleted = (state.pomodorosCompleted || 0) + 1; state.pomodoroDays = state.pomodoroDays || {}; state.pomodoroDays[localDate()] = (state.pomodoroDays[localDate()] || 0) + 1; saveData(); updateFocusRing();
+                    triggerBreakModal();
+                }
+            }, 1000);
+        }
+        function pausePomodoro() { clearInterval(pomoInterval); isPomo = false; document.getElementById('pomoStatus').textContent = 'Paused'; updatePomo(); }
+        function resetPomodoro() { clearInterval(pomoInterval); isPomo = false; pomoMode = 'w'; pomoTime = customWork*60; updatePomo(); document.getElementById('pomoStatus').textContent = 'Ready to focus!'; }
+        function togglePomodoroCollapse() {
+            const content = document.getElementById('pomoContent'), icon = document.getElementById('pomoCollapseIcon');
+            if (content.style.height === '0px' || content.classList.contains('hidden')) {
+                content.classList.remove('hidden'); content.style.height = 'auto'; content.style.marginTop = '16px'; icon.className = "fa-solid fa-chevron-down";
+            } else {
+                content.classList.add('hidden'); content.style.height = '0px'; content.style.marginTop = '0px'; icon.className = "fa-solid fa-chevron-up";
+                document.getElementById('pomoSettings').classList.add('hidden');
+            }
+        }
+        function toggleZenMode() {
+            document.body.classList.toggle('zen-mode');
+            const icon = document.getElementById('zenIcon');
+            const exitBtn = document.getElementById('zenExitBtn');
+            if(document.body.classList.contains('zen-mode')) {
+                icon.classList.remove('fa-compress'); icon.classList.add('fa-expand'); exitBtn.classList.remove('hidden'); showToast('Zen Mode Activated 🧘‍♂️');
+            } else {
+                icon.classList.add('fa-compress'); icon.classList.remove('fa-expand'); exitBtn.classList.add('hidden'); showToast('Zen Mode Deactivated');
+            }
+        }
+
+        // ================= HEATMAP & SEARCH =================
+        function renderHeatmap() {
+            const grid = document.getElementById('heatmapGrid'); grid.innerHTML = '';
+            let d = new Date(); d.setDate(d.getDate() - 29);
+            for(let i=0; i<30; i++) {
+                let dateStr = localDate(d), count = state.activity[dateStr] || 0;
+                let cClass = count > 5 ? 'bg-emerald-600' : count > 2 ? 'bg-emerald-400' : count > 0 ? 'bg-emerald-200' : 'bg-gray-200 dark:bg-gray-700';
+                grid.innerHTML += `<div class="w-4 h-4 rounded-sm ${cClass} transition-colors duration-300 hover:ring-2 ring-gray-400" title="${dateStr}: ${count} actions"></div>`;
+                d.setDate(d.getDate() + 1);
+            }
+            updateFocusRing();
+        }
+
+        // [INJECTED] Focus Ring Update logic
+        function updateFocusRing() {
+            let pCount = (state.pomodoroDays || {})[localDate()] || 0;  // today's sessions
+            let ratio = Math.min((pCount / 4) * 100, 100); // Goal is 4 sessions (example)
+            document.getElementById('focusRingPath').style.strokeDasharray = `${ratio}, 100`;
+            document.getElementById('focusRingText').textContent = `${Math.round(ratio)}%`;
+        }
+
+        function initSearch() { document.addEventListener('keydown', (e) => {
+            if(e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearchModal(); }
+            if(e.key === 'Escape') { closeSearchModal(); closeSubjectModal(); if(!document.getElementById('confirmModal').classList.contains('hidden')) closeConfirmModal(); }
+        }); }
+        function openSearchModal() { document.getElementById('searchModal').classList.remove('hidden'); setTimeout(()=>document.getElementById('searchInput').focus(), 100); }
+        function closeSearchModal() { document.getElementById('searchModal').classList.add('hidden'); document.getElementById('searchInput').value=''; document.getElementById('searchResults').innerHTML=''; }
+        function performSearch() {
+            const q = document.getElementById('searchInput').value.toLowerCase().trim(), c = document.getElementById('searchResults');
+            if(!q) { c.innerHTML = ''; return; }
+            let r = [];
+            state.notes.filter(n=>n.text.toLowerCase().includes(q)).forEach(n=>r.push({icon:'fa-pen text-yellow-500', t:'Note', text:n.text.substring(0,50)+'...', sub:n.subjectId, tab:'notes'}));
+            state.tasks.filter(t=>t.text.toLowerCase().includes(q)).forEach(t=>r.push({icon:'fa-check text-emerald-500', t:'Task', text:t.text, sub:t.subjectId, tab:'tasks'}));
+            (state.links || []).filter(l=>l.title.toLowerCase().includes(q)).forEach(l=>r.push({icon:'fa-link text-blue-500', t:'Link', text:l.title, sub:l.subjectId, tab:'links'}));
+            state.pdfs.filter(p=>p.original_name.toLowerCase().includes(q)).forEach(p=>r.push({icon:'fa-file text-blue-500', t:'File', text:p.original_name, sub:p.subjectId, tab:'pdfs'}));
+            state.flashcards.filter(f=>f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q)).forEach(f=>r.push({icon:'fa-clone text-purple-500', t:'Flashcard', text:f.q, sub:f.subjectId, tab:'flashcards'}));
+            state.deadlines.filter(d=>d.title.toLowerCase().includes(q)).forEach(d=>r.push({icon:'fa-calendar text-brand-500', t:'Event', text:d.title, sub:d.subjectId, tab:'deadlines'}));
+            
+            c.innerHTML = r.length ? r.map(x => {
+                const subName = state.subjects.find(s=>s.id === x.sub)?.name || 'Deleted Subject';
+                return `
+                <div onclick="openSearchResult('${escJs(x.sub)}', '${x.tab}')" class="p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer flex justify-between rounded-xl mb-1 transition group">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 shadow-inner"><i class="fa-solid ${x.icon} text-lg"></i></div>
+                        <div>
+                            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">${esc(x.text)}</div>
+                            <div class="text-xs font-semibold text-gray-500 mt-1">${esc(subName)} • ${x.t}</div>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-arrow-right text-gray-300 opacity-0 group-hover:opacity-100 transition self-center"></i>
+                </div>`
+            }).join('') : '<div class="p-8 text-center text-gray-400 font-bold"><i class="fa-solid fa-ghost text-4xl mb-3"></i><br>No results found</div>';
+        }
+
+        function exportData() {
+            const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob); const a = document.createElement('a');
+            a.href = url; a.download = `StudyHub_Backup_${new Date().toLocaleDateString('en-GB').replace(/\//g,'-')}.json`; a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 2000); showToast('Database Backup Downloaded! 💾');
+        }
+    </script>
+</body>
+</html>
